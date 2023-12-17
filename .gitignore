@@ -1,2 +1,4 @@
 imgs/*
 output/*
+**/pokefetch-venv
+**/__pycache__

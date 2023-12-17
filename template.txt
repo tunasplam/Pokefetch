@@ -1,0 +1,13 @@
+Name:               {C1}{name}{NC}
+PokeDex Number:     {C1}{ID}{NC}
+Gender:             {C2}{gender_info}{NC}
+Abilities:
+{abilities}
+
+--- Base Stats ---
+HP:                 {C1}{hp}{NC}
+Attack:             {C1}{attack}{NC}
+Defence:            {C1}{defense}{NC}
+Special Attack:     {C1}{special-attack}{NC}
+Special Defence:    {C1}{special-defense}{NC}
+Speed:              {C1}{speed}{NC}
