@@ -1,24 +1,13 @@
 """
-Port to pokebase API first. Then fix the existing issues.
+TODO set up fuzzy pokemon input
+https://github.com/seatgeek/thefuzz
 
-Accept:
-    Name or pokedex ID
-
-    - maybe if the spelling is close enough then it fuzzes to the correct choice?
-
-verbose template and shortened template for like gameboy color?
+- verbose template and shortened template for like gameboy color?
 
 TODO theres a nasty overhead if you are calling a pokemon for the first
 time. There is, however, an API cache. The total amount of data that
 we can call on seems to be pretty limited so maybe just pull everything
 on install?
-
-TODO image to the left of the output... how does neofetch do it
-with images?
-    - https://github.com/dylanaraps/neofetch/blob/master/neofetch#L4010
-    Notice that they enumerate a case for every image display backend...
-    If we want this to be adoptable widespread then i guess we will need
-    to do this.
 
 TODO a preferences file that lets you limit pokemon generations?
 
@@ -32,6 +21,7 @@ import os.path
 from os import system
 import pokebase as pb
 import requests
+from sys import exit
 
 
 bc = {
@@ -96,16 +86,28 @@ def main():
     )
 
     args = parser.parse_args()
-    handle_pokemon(args.pokemon, args.female, args.shiny)
+    handle_pokemon(args.pokemon.lower(), args.female, args.shiny)
 
 def handle_pokemon(p, female: bool, shiny: bool):
+
+    # nasty mr. mime special case
+    # TODO I am sure that there are more...
+    # this is where fuzzy matching will probably come into play
+    if p.replace('. ', '').replace(' ', '').lower() == 'mrmime':
+        p = 'mr-mime'
 
     # lookup the pokemon    
     poke = lookup_pokemon(p)
     poke_extra = lookup_pokemon_species(p)
 
-    # verify selected gender.
-    # if sprites.front_female is null then we are looking at
+    # if this does not work then the searched pokemon is not valid.
+    try:
+        if poke.sprites.front_female: pass
+    except AttributeError:
+        print("Pokemon not found! Please enter valid pokemon.")
+        exit(1)
+
+    # verify and set selected gender.
     if not poke.sprites.front_female:
         gender = Gender['GENDERLESS']
     elif female:
@@ -125,12 +127,16 @@ def handle_pokemon(p, female: bool, shiny: bool):
         } | bc | stats_dict(poke)
     )
 
+    print('\n'*100)
+
     image_filepath = grab_sprite(poke, gender, shiny)
     # TODO at some point handle different image viewers.
-    # $((width/font_width))x$((height/font_height))@${xoffset}x${yoffset}
-    #system(f'kitten icat --align left --scale-up --place 10x10@0x0 {image_filepath}')
-    
-    print(output)
+    system(f'kitten icat --align left --scale-up --place 25x25@0x3 {image_filepath}')
+
+    print()
+    print(f"\t\t\t{bc['BC3']}{poke.name.title()}{bc['NC']}")
+    print()
+    print_output(output, 30)
 
 def lookup_pokemon(p):
     if p.isdigit():
@@ -186,7 +192,7 @@ def grab_sprite(poke, gender: Gender, shiny: bool):
 
     filepath = f'imgs/{poke.id_}_{gender.value}'
     if shiny:
-        filepath += f'_{shiny}'
+        filepath += '_shiny'
     filepath += '.png'
 
     if os.path.isfile(filepath):
@@ -215,5 +221,12 @@ def grab_sprite(poke, gender: Gender, shiny: bool):
         # TODO what to do if not a 200 status code...?
 
         return filepath
+
+def print_output(output: str, padding: int):
+    # this prints out the final output.
+    # necessary in order to pad each line with blank spaces
+    for line in output.split('\n'):
+        print(' '*padding, end='')
+        print(line)
 
 main()

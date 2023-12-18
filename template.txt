@@ -1,6 +1,3 @@
-{C5}---------------------------------
- {BC6}{name}
-{C5}---------------------------------{NC}
 {C2}PokeDex Number:     {C4}{ID}{NC}
 {C2}Gender:             {C4}{gender_info}{NC}
 {C2}Abilities:{C4}
