@@ -6,15 +6,33 @@ Accept:
 
     - maybe if the spelling is close enough then it fuzzes to the correct choice?
 
-TODO the output should be some sort of templated output. With
-cool things like bash coloring and italicizing and whatnot.
-
 verbose template and shortened template for like gameboy color?
 
-"""
+TODO theres a nasty overhead if you are calling a pokemon for the first
+time. There is, however, an API cache. The total amount of data that
+we can call on seems to be pretty limited so maybe just pull everything
+on install?
 
-import pokebase as pb
+TODO image to the left of the output... how does neofetch do it
+with images?
+    - https://github.com/dylanaraps/neofetch/blob/master/neofetch#L4010
+    Notice that they enumerate a case for every image display backend...
+    If we want this to be adoptable widespread then i guess we will need
+    to do this.
+
+TODO a preferences file that lets you limit pokemon generations?
+
+TODO generate output for every possible combination to make sure
+theres no strange edge cases. save as an automated test maybe?
+
+"""
 import argparse
+from enum import Enum
+import os.path
+from os import system
+import pokebase as pb
+import requests
+
 
 bc = {
     'NC': '\033[0m',
@@ -47,7 +65,15 @@ bc = {
     'UC7': '\033[4;37m'
 }
 
+# [Insert "Not making any political/existential/philosophic statement!"
+# disclaimer here]
+class Gender(Enum):
+    MALE = 'Male'
+    FEMALE = 'Female'
+    GENDERLESS = 'Genderless'
+
 def main():
+    # parses command line arguements
     parser = argparse.ArgumentParser(
         prog='PokeFetch',
         description='Displays cool pokemon sprites/stats in terminal.',
@@ -55,31 +81,55 @@ def main():
     )
 
     # accepts either pokedex number (int) or name (str)
-    parser.add_argument('pokemon', help='Select a pokemon by name or pokedex ID.')
+    parser.add_argument(
+        'pokemon',
+        help='Select a pokemon by name or pokedex ID.')
+    parser.add_argument(
+        '--female',
+        action=argparse.BooleanOptionalAction,
+        help='If the selected pokemon is gendered then display the female sprite.'
+    )
+    parser.add_argument(
+        '--shiny',
+        action=argparse.BooleanOptionalAction,
+        help='Display the shiny version of the pokemon sprite.'
+    )
 
     args = parser.parse_args()
-    
-    handle_pokemon(args.pokemon)
+    handle_pokemon(args.pokemon, args.female, args.shiny)
 
-def handle_pokemon(p):
+def handle_pokemon(p, female: bool, shiny: bool):
 
     # lookup the pokemon    
     poke = lookup_pokemon(p)
     poke_extra = lookup_pokemon_species(p)
 
+    # verify selected gender.
+    # if sprites.front_female is null then we are looking at
+    if not poke.sprites.front_female:
+        gender = Gender['GENDERLESS']
+    elif female:
+        gender = Gender['FEMALE']
+    else:
+        gender = Gender['MALE']
 
     with open('template.txt', 'r') as f:
         output = f.read()
     
-    print(poke.stats)
+    output = output.format_map(
+        {
+            'name':         poke.name.title(),
+            'ID':           poke.id_, 
+            'gender_info':  format_gender(poke_extra.gender_rate),
+            'abilities':    format_abilities(poke.abilities),
+        } | bc | stats_dict(poke)
+    )
 
-    output = output.format_map({
-        'name':         poke.name.title(),
-        'ID':           poke.id_, 
-        'gender_info':  format_gender(poke_extra.gender_rate),
-        'abilities':    format_abilities(poke.abilities),
-    } | bc | stats_dict(poke))
-
+    image_filepath = grab_sprite(poke, gender, shiny)
+    # TODO at some point handle different image viewers.
+    # $((width/font_width))x$((height/font_height))@${xoffset}x${yoffset}
+    #system(f'kitten icat --align left --scale-up --place 10x10@0x0 {image_filepath}')
+    
     print(output)
 
 def lookup_pokemon(p):
@@ -95,7 +145,7 @@ def lookup_pokemon_species(p):
     else:
         return pb.pokemon_species(p)
 
-def format_gender(e):
+def format_gender(e: int):
     # takes the gender rate for female (in 8ths)
     # and returns the formatted line for gender info.
     # A value of -1 means genderless
@@ -119,7 +169,7 @@ def format_abilities(a):
             result += ' [HIDDEN]\n'
         else:
             result += '\n'
-    return result
+    return result[:-1]
 
 def stats_dict(poke):
     # creates a dict of the stats for formatting the template
@@ -129,23 +179,41 @@ def stats_dict(poke):
     
     return res
 
-# # Print all moves of the type named here.
-# TYPE = 'normal'
+def grab_sprite(poke, gender: Gender, shiny: bool):
+    # returns the path to the downloaded sprite for the selected pokemon
+    # cached pokemon file name schema:
+    # imgs/[pokedex number]_[gender]_[shiny].png
 
-# # Good method.
-# # Get API data associated with the type we want.
-# type_moves = pb.type_(TYPE).moves
+    filepath = f'imgs/{poke.id_}_{gender.value}'
+    if shiny:
+        filepath += f'_{shiny}'
+    filepath += '.png'
 
-# # Iterate & print.
-# for move in type_moves:
-#     print(move.name)
+    if os.path.isfile(filepath):
+        return filepath
+    else:
+        # if the pokemon is genderless then female sprites are null
+        # and we want to return the male sprite.
+        if gender.value == 'Male' or gender.value == 'Genderless':
+            if shiny:
+                url = poke.sprites.front_shiny
+            else:
+                url = poke.sprites.front_default
+        elif gender.value == 'Female':
+            if shiny:
+                url = poke.sprite.front_shiny_female
+            else:
+                url = poke.sprites.front_female
 
-# POKEMON = 'ditto'
+        response = requests.get(url)
 
-# poke = pb.pokemon(POKEMON)
+        if response.status_code == 200:
+            # save the image in the cache.
+            with open(filepath, 'wb') as f:
+                f.write(response.content)
 
-# for ability in poke.abilities:
-#     print(ability.is_hidden)
-#     print(ability.ability.name)
+        # TODO what to do if not a 200 status code...?
+
+        return filepath
 
 main()

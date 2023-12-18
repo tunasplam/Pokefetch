@@ -1,13 +1,14 @@
-Name:               {C1}{name}{NC}
-PokeDex Number:     {C1}{ID}{NC}
-Gender:             {C2}{gender_info}{NC}
-Abilities:
+{C5}---------------------------------
+ {BC6}{name}
+{C5}---------------------------------{NC}
+{C2}PokeDex Number:     {C4}{ID}{NC}
+{C2}Gender:             {C4}{gender_info}{NC}
+{C2}Abilities:{C4}
 {abilities}
 
---- Base Stats ---
-HP:                 {C1}{hp}{NC}
-Attack:             {C1}{attack}{NC}
-Defence:            {C1}{defense}{NC}
-Special Attack:     {C1}{special-attack}{NC}
-Special Defence:    {C1}{special-defense}{NC}
-Speed:              {C1}{speed}{NC}
+{C3}HP:                 {C4}{hp}{NC}
+{C3}Attack:             {C4}{attack}{NC}
+{C3}Defence:            {C4}{defense}{NC}
+{C3}Special Attack:     {C4}{special-attack}{NC}
+{C3}Special Defence:    {C4}{special-defense}{NC}
+{C3}Speed:              {C4}{speed}{NC}
