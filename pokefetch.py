@@ -14,6 +14,9 @@ TODO a preferences file that lets you limit pokemon generations?
 TODO generate output for every possible combination to make sure
 theres no strange edge cases. save as an automated test maybe?
 
+TODO move this into bin and see how the path references work
+and whatnot
+
 """
 import argparse
 from enum import Enum
@@ -21,6 +24,7 @@ import os.path
 from os import system
 import pokebase as pb
 import requests
+from re import sub
 from sys import exit
 
 
@@ -88,15 +92,12 @@ def main():
     args = parser.parse_args()
     handle_pokemon(args.pokemon.lower(), args.female, args.shiny)
 
-def handle_pokemon(p, female: bool, shiny: bool):
+def handle_pokemon(p: str, female: bool, shiny: bool):
 
-    # nasty mr. mime special case
-    # TODO I am sure that there are more...
-    # this is where fuzzy matching will probably come into play
-    if p.replace('. ', '').replace(' ', '').lower() == 'mrmime':
-        p = 'mr-mime'
-
-    # lookup the pokemon    
+    # make the names safe for searching using the api
+    p = clean_name(p, female)
+    
+    # lookup the pokemon
     poke = lookup_pokemon(p)
     poke_extra = lookup_pokemon_species(p)
 
@@ -108,7 +109,11 @@ def handle_pokemon(p, female: bool, shiny: bool):
         exit(1)
 
     # verify and set selected gender.
-    if not poke.sprites.front_female:
+    # nidoran messes things up because nidoran-f will have its sprites
+    # saved under default instead of female
+    # manually set genders for nidoran.
+    if poke == 'nidoran-f' or poke == 'nidoran-m' or \
+        not poke.sprites.front_female:
         gender = Gender['GENDERLESS']
     elif female:
         gender = Gender['FEMALE']
@@ -138,13 +143,13 @@ def handle_pokemon(p, female: bool, shiny: bool):
     print()
     print_output(output, 30)
 
-def lookup_pokemon(p):
+def lookup_pokemon(p: str):
     if p.isdigit():
         return pb.pokemon(int(p))
     else:
         return pb.pokemon(p)
     
-def lookup_pokemon_species(p):
+def lookup_pokemon_species(p: str):
     # extra stats such as gender info are found in here
     if p.isdigit():
         return pb.pokemon_species(int(p))
@@ -159,10 +164,10 @@ def format_gender(e: int):
     if e == -1:
         gender_info = 'genderless'
     else:
-        # TODO male/female symbols.
+        # ♀ ♂
         f_pct = round(100*(e/8.0))
         m_pct = 100-f_pct
-        gender_info = f'F: {f_pct}% M: {m_pct}%'
+        gender_info = f'♀: {f_pct}% ♂: {m_pct}%'
 
     return gender_info
 
@@ -197,6 +202,7 @@ def grab_sprite(poke, gender: Gender, shiny: bool):
 
     if os.path.isfile(filepath):
         return filepath
+
     else:
         # if the pokemon is genderless then female sprites are null
         # and we want to return the male sprite.
@@ -207,7 +213,7 @@ def grab_sprite(poke, gender: Gender, shiny: bool):
                 url = poke.sprites.front_default
         elif gender.value == 'Female':
             if shiny:
-                url = poke.sprite.front_shiny_female
+                url = poke.sprites.front_shiny_female
             else:
                 url = poke.sprites.front_female
 
@@ -219,8 +225,35 @@ def grab_sprite(poke, gender: Gender, shiny: bool):
                 f.write(response.content)
 
         # TODO what to do if not a 200 status code...?
+        # hasn't come up yet so not bothering yet
 
         return filepath
+
+def clean_name(p: str, female: bool) -> str:
+    p = sub(r"[^'`’a-zA-Z\-]+", '-', p).lower()
+
+    # Farfetch’d -> farfetchd
+    p = sub(r"['`’]", '', p)
+
+    # In case someone puts the gender symbols at the end for Nidoran
+    if p[-1] == '-':
+        p = p[:-1]
+    
+    return name_special_cases(p, female)
+
+def name_special_cases(p: str, female: bool) -> str:
+    # Nidoran special case
+    if p == 'nidoran' and female:
+        p = 'nidoran-f'
+    elif p == 'nidoran' and not female:
+        p = 'nidoran-m'
+
+    # deoxys is a bit tricky bc of the types
+    # if only deoxys is entered then assume deoxys-normal
+    elif p == 'deoxys':
+        p = 'deoxys-normal'
+
+    return p
 
 def print_output(output: str, padding: int):
     # this prints out the final output.
@@ -229,4 +262,5 @@ def print_output(output: str, padding: int):
         print(' '*padding, end='')
         print(line)
 
-main()
+if __name__ == '__main__':
+    main()
