@@ -22,7 +22,11 @@ def prime_cache():
     for pokemon in wordlist:
         print(pokemon)
         for gender in ['MALE', 'FEMALE']:
-            p = clean_name(pokemon)
+
+            if gender == 'FEMALE':
+                p = clean_name(pokemon, True)
+            else:
+                p = clean_name(pokemon, False)
 
             print(p)
 

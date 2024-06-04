@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "pokefetch"
+version = "1.0.0"
+description = "Pretty pokemon pictures with stats in your command line"
+authors = ["Jordan Porter <tunasplam@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pokebase = "^1.4.1"
+argparse = "^1.4.0"
+requests = "^2.32.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

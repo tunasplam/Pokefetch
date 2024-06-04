@@ -1,8 +1,12 @@
 """
 TODO set up fuzzy pokemon input
 https://github.com/seatgeek/thefuzz
+- if more than one option allow the user to pick
+- this could be great for multi-form pokemon such as deoxys
 
 - verbose template and shortened template for like gameboy color?
+- yes, also having template.txt be something in a conf that can be edited
+    means that users can customize their prompts.
 
 TODO theres a nasty overhead if you are calling a pokemon for the first
 time. There is, however, an API cache. The total amount of data that
@@ -17,6 +21,11 @@ theres no strange edge cases. save as an automated test maybe?
 TODO move this into bin and see how the path references work
 and whatnot
 
+TODO double check that ID works. maybe run iterating through all of those
+to see if they all work too..
+
+TODO nidoran and meowstic female sprites likely oversaving the male ones
+bc of the way we set their gender to genderless
 """
 import argparse
 from enum import Enum
@@ -230,6 +239,9 @@ def grab_sprite(poke, gender: Gender, shiny: bool):
         return filepath
 
 def clean_name(p: str, female: bool) -> str:
+    # é -> e
+    p = sub(r'é', 'e', p)
+
     p = sub(r"[^'`’a-zA-Z\-]+", '-', p).lower()
 
     # Farfetch’d -> farfetchd
@@ -238,13 +250,14 @@ def clean_name(p: str, female: bool) -> str:
     # In case someone puts the gender symbols at the end for Nidoran
     if p[-1] == '-':
         p = p[:-1]
-    
+
     return name_special_cases(p, female)
 
-def name_special_cases(p: str, female: bool) -> str:
-    # Nidoran special case
+def name_special_cases(p: str, female: bool) -> str: 
+
     if p == 'nidoran' and female:
         p = 'nidoran-f'
+
     elif p == 'nidoran' and not female:
         p = 'nidoran-m'
 
@@ -252,6 +265,46 @@ def name_special_cases(p: str, female: bool) -> str:
     # if only deoxys is entered then assume deoxys-normal
     elif p == 'deoxys':
         p = 'deoxys-normal'
+
+    # wormadam has three forms. assume plant as default.
+    elif p == 'wormadam':
+        p = 'wormadam-plant'
+
+    # two forms: altered and origin
+    elif p == 'giratina':
+        p = 'giratina-altered'
+
+    # land or sky
+    elif p == 'shaymin':
+        p = 'shaymin-land'
+
+    # red-striped, blue-striped, or white-striped
+    elif p == 'basculin':
+        p = 'basculin-red-striped'\
+    
+    # standard and zen TODO also galarian!
+    elif p == 'darmanitan':
+        p = 'darmanitan-standard'
+
+    # incarnate and therian
+    elif p == 'tornadus':
+        p = 'tornadus-incarnate'
+
+    # incarnate and therian
+    elif p == 'thundurus':
+        p = 'thundurus-incarnate'
+
+    # incarnate and therian
+    elif p == 'landorus':
+        p = 'landorus-incarnate'
+
+    # ordinary and resolute
+    elif p == 'keldeo':
+        p = 'keldeo-ordinary'
+
+    # aria or pirouette
+    elif p == 'meloetta':
+        p = 'meloetta-aria'
 
     return p
 

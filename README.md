@@ -1,96 +1,42 @@
 # Pokefetch
-This is a script I'm working on to further my webscraping skills
-## Tools
-Python 3
-* Requests
-* BeautifulSoup
 
-Bash
-* catimg
-
-[Serebii](https://www.serebii.net)
-* Currently rewriting my scraper to use [Bulbapedia](http://bulbapedia.bulbagarden.net)
+Not guaranteed to work for pokemon after Gen V
 
 ## Context
-This script currently asks for the pokedex number of the pokemon you'd like
-to get information about, then it will get the picture and some related
-information such as type, abilities, weaknesses, etc.
+This script currently asks for the pokedex name or number of the pokemon you'd like to get information about. Then it will get the picture and some related information such as type, abilities, weaknesses, etc.
 
-I wanted to model the output to be similar to screenfetch and neofetch, two popular scripts to grab system information.
+Currently, this tool runs on Kitty using the `icat` kitten. If you would like to modify this tool to add other image backends then feel free to fork this.
 
-![Alt text](imgs/neofetch.png?raw=true "Neofetch Example")
-
-
+![Someday an example image will be here](imgs/25_Female.png "Initial Example")
 
 ## Setup
 
-### Starting steps:
+### kitty
+Currently, this only supports kitty.
+
+[Information here](https://sw.kovidgoyal.net/kitty/)
+
+### Using pip
+
+`pip install pokefetch`
+
+### Using github + Poetry
+
+[Install Poetry](https://github.com/PokeAPI/pokebase)
 
 Clone this repository to a directory of your choice in the command-line:
 ```
-git clone https://github.com/rmccorm4/pokefetch
+git clone https://github.com/tunasplam/Pokefetch.git
 ```
 
-Make sure you have all of the necessary third-party libraries described below
-
-#### Python requests module 
-
+In the directory:
 ```
-pip install requests
+poetry install
 ```
 
-#### Python BeautifulSoup module 
+## Future Goals
 
-```
-pip install bs4
-```
-
-
-#### catimg
-
-On Arch Linux:
-```
-yaourt -S catimg
-```
-
-Otherwise, follow the instructions here:
-[https://github.com/posva/catimg](https://github.com/posva/catimg)
-
-### Disclaimers
-
-The "Gender" category that gets printed out uses ascii symbols and may
-not print properly depending on your terminal configurations. 
-
-Personally, I use `adobe-source-code-pro-fonts` and I make sure that my 
-terminal's default encoding is `UTF-8`
-
-### Running the script:
-
-```
-./pokefetch.sh <pokemon_name>
-```
-
-Example below.
-
-
-## Current progress
-This is what I have so far:
-
-![Alt text](imgs/progress.png?raw=true "Pokefetch Example")
-
-However this requires a full-screen terminal in order to come out nicely.
-
-## To-do
-
-* [ ] Make sure it works for every single pokemon, including difficult names such as "Mr. Mime" and "Ho-oh"
-* [ ] Get higher quality images to output if possible, need to research this more
-* [ ] Conversely, try to find more pixellated versions of the newer models in hopes of getting a prettier output
-* [ ] Add a -shiny flag to output the shiny sprite instead of the regular one
-* [ ] Scrape more relevant information about the pokemon
-* [ ] Make script work for default size terminal as well as full-screen?
-* [ ] Rewrite my scraping method to be much cleaner and more uniform
-* [ ] Include Gen VII pokemon
-* [ ] Implement old-school sprites because they come out much nicer as seen below
-* [ ] Possibly add old school gifs from the special games like yellow and crystal
-
-![Alt text](imgs/oldschool_sprite.png?raw=true "Old School Sprite Example")
+- Fuzzy matching for pokemon names
+- Package and distribute through package managers
+- Cool little dataset that has 8 bash colors for each pokemon sprite
+- Tool that finds the pokemon sprite best associated with 8 given colors. This will hopefully allow this to be hooked in with pywal.
