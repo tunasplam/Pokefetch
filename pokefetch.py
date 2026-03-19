@@ -1,40 +1,24 @@
-"""
-TODO set up fuzzy pokemon input
-https://github.com/seatgeek/thefuzz
-- if more than one option allow the user to pick
-- this could be great for multi-form pokemon such as deoxys
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#   "pokebase>=1.4.1",
+#   "requests>=2.32.3",
+#   "typer>=0.15",
+# ]
+# ///
 
-- verbose template and shortened template for like gameboy color?
-- yes, also having template.txt be something in a conf that can be edited
-    means that users can customize their prompts.
-
-TODO theres a nasty overhead if you are calling a pokemon for the first
-time. There is, however, an API cache. The total amount of data that
-we can call on seems to be pretty limited so maybe just pull everything
-on install?
-
-TODO a preferences file that lets you limit pokemon generations?
-
-TODO generate output for every possible combination to make sure
-theres no strange edge cases. save as an automated test maybe?
-
-TODO move this into bin and see how the path references work
-and whatnot
-
-TODO double check that ID works. maybe run iterating through all of those
-to see if they all work too..
-
-TODO nidoran and meowstic female sprites likely oversaving the male ones
-bc of the way we set their gender to genderless
-"""
-import argparse
-from enum import Enum
 import os.path
-from os import system
+import random
+import subprocess
+from re import sub
+import tomllib
+from typing import Any, Literal, Optional
+import unicodedata
+
 import pokebase as pb
 import requests
-from re import sub
-from sys import exit
+import typer
 
 
 bc = {
@@ -70,69 +54,86 @@ bc = {
 
 # [Insert "Not making any political/existential/philosophic statement!"
 # disclaimer here]
-class Gender(Enum):
-    MALE = 'Male'
-    FEMALE = 'Female'
-    GENDERLESS = 'Genderless'
+Gender = Literal['Male', 'Female', 'Genderless']
 
-def main():
-    # parses command line arguements
-    parser = argparse.ArgumentParser(
-        prog='PokeFetch',
-        description='Displays cool pokemon sprites/stats in terminal.',
-        epilog='Have fun.'
-    )
+DEFAULT_TEMPLATE = """\
+{C2}PokeDex Number:     {C4}{ID}{NC}
+{C2}Gender:             {C4}{gender_info}{NC}
+{C2}Abilities:{C4}
+{abilities}
 
-    # accepts either pokedex number (int) or name (str)
-    parser.add_argument(
-        'pokemon',
-        help='Select a pokemon by name or pokedex ID.')
-    parser.add_argument(
-        '--female',
-        action=argparse.BooleanOptionalAction,
-        help='If the selected pokemon is gendered then display the female sprite.'
-    )
-    parser.add_argument(
-        '--shiny',
-        action=argparse.BooleanOptionalAction,
-        help='Display the shiny version of the pokemon sprite.'
-    )
+{C3}HP:                 {C4}{hp}{NC}
+{C3}Attack:             {C4}{attack}{NC}
+{C3}Defence:            {C4}{defense}{NC}
+{C3}Special Attack:     {C4}{special-attack}{NC}
+{C3}Special Defence:    {C4}{special-defense}{NC}
+{C3}Speed:              {C4}{speed}{NC}
+"""
 
-    args = parser.parse_args()
-    handle_pokemon(args.pokemon.lower(), args.female, args.shiny)
+CONFIG_DIR = os.path.expanduser('~/.config/pokefetch')
+TEMPLATE_PATH = os.path.join(CONFIG_DIR, 'template.txt')
+CONFIG_PATH = os.path.join(CONFIG_DIR, 'config.toml')
+CACHE_DIR = os.path.expanduser('~/.cache/pokefetch')
 
-def handle_pokemon(p: str, female: bool, shiny: bool):
+GEN_MAX_ID = {
+    1: 151,
+    2: 251,
+    3: 386,
+    4: 493,
+    5: 649,
+    6: 721,
+    7: 809,
+    8: 905,
+    9: 1025,
+}
 
-    # make the names safe for searching using the api
-    p = clean_name(p, female)
-    
-    # lookup the pokemon
-    poke = lookup_pokemon(p)
-    poke_extra = lookup_pokemon_species(p)
+FORM_DEFAULTS = {
+    'deoxys':     'deoxys-normal',
+    'wormadam':   'wormadam-plant',
+    'giratina':   'giratina-altered',
+    'shaymin':    'shaymin-land',
+    'basculin':   'basculin-red-striped',
+    'darmanitan': 'darmanitan-standard',  # TODO also galarian!
+    'tornadus':   'tornadus-incarnate',
+    'thundurus':  'thundurus-incarnate',
+    'landorus':   'landorus-incarnate',
+    'keldeo':     'keldeo-ordinary',
+    'meloetta':   'meloetta-aria',
+}
 
-    # if this does not work then the searched pokemon is not valid.
-    try:
-        if poke.sprites.front_female: pass
-    except AttributeError:
-        print("Pokemon not found! Please enter valid pokemon.")
-        exit(1)
+app = typer.Typer()
 
-    # verify and set selected gender.
-    # nidoran messes things up because nidoran-f will have its sprites
-    # saved under default instead of female
-    # manually set genders for nidoran.
-    if poke == 'nidoran-f' or poke == 'nidoran-m' or \
-        not poke.sprites.front_female:
-        gender = Gender['GENDERLESS']
-    elif female:
-        gender = Gender['FEMALE']
+SPRITE_W = 25
+SPRITE_H = 13
+
+@app.command()
+def show(
+    pokemon: Optional[str] = typer.Argument(None, help='Select a pokemon by name or pokedex ID.'),
+    female: bool = typer.Option(False, help='Display the female sprite.'),
+    shiny: bool = typer.Option(False, help='Display the shiny version of the pokemon sprite.'),
+    back: bool = typer.Option(False, help='Display the back-facing sprite.'),
+    random_pokemon: bool = typer.Option(False, '--random', help='Display a random pokemon.'),
+):
+    """Displays cool pokemon sprites/stats in terminal."""
+    if random_pokemon:
+        config = load_config()
+        max_gen = config.get('max_generation', 5)
+        if max_gen not in GEN_MAX_ID:
+            raise typer.BadParameter(f'max_generation must be 1–9, got {max_gen}.')
+        identifier: int | str = random.randint(1, GEN_MAX_ID[max_gen])
+    elif pokemon is None:
+        raise typer.BadParameter('Provide a pokemon name/ID or use --random.')
+    elif pokemon.isdigit():
+        identifier = int(pokemon)
     else:
-        gender = Gender['MALE']
-
-    with open('template.txt', 'r') as f:
-        output = f.read()
-    
-    output = output.format_map(
+        identifier = clean_name(pokemon, female)
+    poke = lookup_pokemon(identifier)
+    validate(poke)
+    poke_extra = lookup_pokemon_species(identifier)
+    gender = lookup_gender(poke, female)
+    image_filepath = get_sprite(poke, gender, shiny, back)
+    template = load_template()
+    output = template.format_map(
         {
             'name':         poke.name.title(),
             'ID':           poke.id_, 
@@ -140,109 +141,151 @@ def handle_pokemon(p: str, female: bool, shiny: bool):
             'abilities':    format_abilities(poke.abilities),
         } | bc | stats_dict(poke)
     )
+    print('\033[2J\033[H', end='', flush=True)
+    draw_output(poke.name.title(), output)
+    subprocess.run(
+        ['kitty', '+kitten', 'icat', '--align', 'left', '--scale-up',
+         '--place', f'{SPRITE_W}x{SPRITE_H}@1x1', image_filepath],
+        check=True,
+    )
 
-    print('\n'*100)
+@app.command()
+def prime_cache():
+    """Downloads and caches sprites for all pokemon up to the configured max generation."""
+    config = load_config()
+    max_gen = config.get('max_generation', 5)
+    if max_gen not in GEN_MAX_ID:
+        raise typer.BadParameter(f'max_generation must be 1–9, got {max_gen}.')
+    max_id = GEN_MAX_ID[max_gen]
 
-    image_filepath = grab_sprite(poke, gender, shiny)
-    # TODO at some point handle different image viewers.
-    system(f'kitten icat --align left --scale-up --place 25x25@0x3 {image_filepath}')
+    for pokemon_id in range(1, max_id + 1):
+        poke = lookup_pokemon(pokemon_id)
+        typer.echo(f'{pokemon_id}: {poke.name}')
+        for female in [False, True]:
+            gender = lookup_gender(poke, female)
+            if gender == 'Genderless' and female:
+                continue
+            get_sprite(poke, gender, shiny=False, back=False)
+            get_sprite(poke, gender, shiny=True, back=False)
 
-    print()
-    print(f"\t\t\t{bc['BC3']}{poke.name.title()}{bc['NC']}")
-    print()
-    print_output(output, 30)
+def validate(poke: Any):
+    """Determines if the pokemon is valid."""
+    if poke.id_ is None:
+        print("Pokemon not found! Please enter valid pokemon.")
+        raise typer.Exit(1)
 
-def lookup_pokemon(p: str):
-    if p.isdigit():
-        return pb.pokemon(int(p))
+def lookup_pokemon(p: int | str) -> Any:
+    """Looks up pokemon using pokebase API"""
+    return pb.pokemon(p)
+
+def lookup_pokemon_species(p: int | str) -> Any:
+    """Looks up extra info (gender rate, etc.) for a pokemon."""
+    return pb.pokemon_species(p)
+
+def lookup_gender(poke, female: bool) -> Gender:
+    """Determine selected gender"""
+    # nidoran messes things up because nidoran-f will have its sprites
+    # saved under default instead of female
+    # manually set genders for nidoran.
+    if poke == 'nidoran-f' or poke == 'nidoran-m' or \
+      not poke.sprites.front_female:
+        return 'Genderless'
+
+    if female:
+        return 'Female'
+
+    return 'Male'
+
+def load_config() -> dict:
+    """Loads user config from ~/.config/pokefetch/config.toml."""
+    if os.path.isfile(CONFIG_PATH):
+        with open(CONFIG_PATH, 'rb') as f:
+            return tomllib.load(f)
+    return {}
+
+def load_template() -> str:
+    """Loads the template from either set path or from default."""
+    if os.path.isfile(TEMPLATE_PATH):
+        with open(TEMPLATE_PATH, 'r', encoding='utf-8') as f:
+            return f.read()
     else:
-        return pb.pokemon(p)
-    
-def lookup_pokemon_species(p: str):
-    # extra stats such as gender info are found in here
-    if p.isdigit():
-        return pb.pokemon_species(int(p))
-    else:
-        return pb.pokemon_species(p)
+        return DEFAULT_TEMPLATE
 
-def format_gender(e: int):
+
+def format_gender(gender_rate: int) -> str:
+    """Determines gender information for the pokemon"""
     # takes the gender rate for female (in 8ths)
     # and returns the formatted line for gender info.
     # A value of -1 means genderless
-    gender_info = ''
-    if e == -1:
-        gender_info = 'genderless'
-    else:
-        # ♀ ♂
-        f_pct = round(100*(e/8.0))
-        m_pct = 100-f_pct
-        gender_info = f'♀: {f_pct}% ♂: {m_pct}%'
+    if gender_rate == -1:
+        return 'genderless'
+    # ♀ ♂
+    f_pct = round(100*(gender_rate/8.0))
+    m_pct = 100-f_pct
+    return f'♀: {f_pct}% ♂: {m_pct}%'
 
-    return gender_info
-
-def format_abilities(a):
-    result = ''
+def format_abilities(a) -> str:
+    """Formats the abilities and specifies if they are hidden."""
+    lines = []
     for ability in a:
-        result += f'\t- {ability.ability.name}'
-
+        line = f'\t- {ability.ability.name}'
         if ability.is_hidden:
-            result += ' [HIDDEN]\n'
-        else:
-            result += '\n'
-    return result[:-1]
+            line += ' [HIDDEN]'
+        lines.append(line)
+    return '\n'.join(lines)
 
-def stats_dict(poke):
-    # creates a dict of the stats for formatting the template
-    res = {}
-    for stat in poke.stats:
-        res[stat.stat.name] = stat.base_stat
-    
-    return res
+def stats_dict(poke) -> dict:
+    """ creates a dict of the stats for formatting the template."""
+    return { stat.stat.name: stat.base_stat for stat in poke.stats }
 
-def grab_sprite(poke, gender: Gender, shiny: bool):
-    # returns the path to the downloaded sprite for the selected pokemon
-    # cached pokemon file name schema:
-    # imgs/[pokedex number]_[gender]_[shiny].png
+def get_sprite(poke, gender: Gender, shiny: bool, back: bool) -> str:
+    """Gets the path to the downloaded sprite for our selected pokemon.
 
-    filepath = f'imgs/{poke.id_}_{gender.value}'
+    Sprites are cached under ~/.cache/pokefetch/ using the schema:
+    [pokedex number]_[gender][_shiny][_back].png
+    """
+    filename = f'{poke.id_}_{gender}'
     if shiny:
-        filepath += '_shiny'
-    filepath += '.png'
+        filename += '_shiny'
+    if back:
+        filename += '_back'
+    filename += '.png'
+    filepath = os.path.join(CACHE_DIR, filename)
 
     if os.path.isfile(filepath):
         return filepath
 
+    # if the pokemon is genderless then female sprites are null
+    # and we want to return the male sprite.
+    if gender == 'Female':
+        if back:
+            url = poke.sprites.back_shiny_female if shiny else poke.sprites.back_female
+        else:
+            url = poke.sprites.front_shiny_female if shiny else poke.sprites.front_female
     else:
-        # if the pokemon is genderless then female sprites are null
-        # and we want to return the male sprite.
-        if gender.value == 'Male' or gender.value == 'Genderless':
-            if shiny:
-                url = poke.sprites.front_shiny
-            else:
-                url = poke.sprites.front_default
-        elif gender.value == 'Female':
-            if shiny:
-                url = poke.sprites.front_shiny_female
-            else:
-                url = poke.sprites.front_female
+        if back:
+            url = poke.sprites.back_shiny if shiny else poke.sprites.back_default
+        else:
+            url = poke.sprites.front_shiny if shiny else poke.sprites.front_default
 
-        response = requests.get(url)
+    response = requests.get(url)
 
-        if response.status_code == 200:
-            # save the image in the cache.
-            with open(filepath, 'wb') as f:
-                f.write(response.content)
+    if response.status_code != 200:
+        print(f'Failed to fetch sprite (HTTP {response.status_code}).')
+        raise typer.Exit(1)
 
-        # TODO what to do if not a 200 status code...?
-        # hasn't come up yet so not bothering yet
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    with open(filepath, 'wb') as f:
+        f.write(response.content)
 
-        return filepath
+    return filepath
 
 def clean_name(p: str, female: bool) -> str:
-    # é -> e
-    p = sub(r'é', 'e', p)
+    """Cleans names to make them safe for API."""
+    # normalize unicode accents (é -> e, etc.)
+    p = unicodedata.normalize('NFKD', p).encode('ascii', 'ignore').decode('ascii')
 
-    p = sub(r"[^'`’a-zA-Z\-]+", '-', p).lower()
+    p = sub(r"[^’`'a-zA-Z\-]+", '-', p).lower()
 
     # Farfetch’d -> farfetchd
     p = sub(r"['`’]", '', p)
@@ -253,67 +296,28 @@ def clean_name(p: str, female: bool) -> str:
 
     return name_special_cases(p, female)
 
-def name_special_cases(p: str, female: bool) -> str: 
+def name_special_cases(p: str, female: bool) -> str:
+    if p == 'nidoran':
+        return 'nidoran-f' if female else 'nidoran-m'
+    return FORM_DEFAULTS.get(p, p)
 
-    if p == 'nidoran' and female:
-        p = 'nidoran-f'
+def draw_output(name: str, output: str):
+    """Draws a rounded box around the sprite area with the pokemon name in the
+    top border and stats appended to the right of each line."""
+    stat_lines = output.rstrip('\n').split('\n')
 
-    elif p == 'nidoran' and not female:
-        p = 'nidoran-m'
+    title = f' {name} '
+    remaining = SPRITE_W - len(title)
+    left = remaining // 2
+    right = remaining - left
 
-    # deoxys is a bit tricky bc of the types
-    # if only deoxys is entered then assume deoxys-normal
-    elif p == 'deoxys':
-        p = 'deoxys-normal'
+    lines = [f'╭{"─" * left}{title}{"─" * right}╮']
+    for i in range(SPRITE_H):
+        stat = stat_lines[i] if i < len(stat_lines) else ''
+        lines.append(f'│{" " * SPRITE_W}│  {stat}{bc["NC"]}')
+    lines.append(f'╰{"─" * SPRITE_W}╯')
 
-    # wormadam has three forms. assume plant as default.
-    elif p == 'wormadam':
-        p = 'wormadam-plant'
-
-    # two forms: altered and origin
-    elif p == 'giratina':
-        p = 'giratina-altered'
-
-    # land or sky
-    elif p == 'shaymin':
-        p = 'shaymin-land'
-
-    # red-striped, blue-striped, or white-striped
-    elif p == 'basculin':
-        p = 'basculin-red-striped'\
-    
-    # standard and zen TODO also galarian!
-    elif p == 'darmanitan':
-        p = 'darmanitan-standard'
-
-    # incarnate and therian
-    elif p == 'tornadus':
-        p = 'tornadus-incarnate'
-
-    # incarnate and therian
-    elif p == 'thundurus':
-        p = 'thundurus-incarnate'
-
-    # incarnate and therian
-    elif p == 'landorus':
-        p = 'landorus-incarnate'
-
-    # ordinary and resolute
-    elif p == 'keldeo':
-        p = 'keldeo-ordinary'
-
-    # aria or pirouette
-    elif p == 'meloetta':
-        p = 'meloetta-aria'
-
-    return p
-
-def print_output(output: str, padding: int):
-    # this prints out the final output.
-    # necessary in order to pad each line with blank spaces
-    for line in output.split('\n'):
-        print(' '*padding, end='')
-        print(line)
+    print('\n'.join(lines), flush=True)
 
 if __name__ == '__main__':
-    main()
+    app()

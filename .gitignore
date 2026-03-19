@@ -3,3 +3,5 @@ output/*
 **/pokefetch-venv
 **/__pycache__
 temp.png
+**/.venv
+**/.pytest_cache

@@ -1,17 +1,20 @@
-[tool.poetry]
+[project]
 name = "pokefetch"
 version = "1.0.0"
 description = "Pretty pokemon pictures with stats in your command line"
-authors = ["Jordan Porter <tunasplam@gmail.com>"]
+authors = [
+    { name = "Jordan Porter", email = "tunasplam@gmail.com" }
+]
 readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pokebase>=1.4.1",
+    "requests>=2.32.3",
+]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-pokebase = "^1.4.1"
-argparse = "^1.4.0"
-requests = "^2.32.3"
-
+[dependency-groups]
+dev = ["pytest>=8"]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
